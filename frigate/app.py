@@ -183,6 +183,16 @@ class FrigateApp:
                     "cpu",
                     detector.num_threads,
                 )
+            if detector.type == DetectorTypeEnum.hailo:
+                self.detectors[name] = EdgeTPUProcess(
+                    name,
+                    self.detection_queue,
+                    self.detection_out_events,
+                    model_path,
+                    model_shape,
+                    "hailo",
+                    detector.num_threads,
+                )
             if detector.type == DetectorTypeEnum.edgetpu:
                 self.detectors[name] = EdgeTPUProcess(
                     name,

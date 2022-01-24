@@ -15,6 +15,8 @@ from tflite_runtime.interpreter import load_delegate
 
 from frigate.util import EventsPerSecond, SharedMemoryFrameManager, listen
 
+from frigate.hailo import hailo
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,38 +58,43 @@ class LocalObjectDetector(ObjectDetector):
         if not tf_device is None:
             device_config = {"device": tf_device}
 
+        self.tf_device = tf_device
         edge_tpu_delegate = None
-
-        if tf_device != "cpu":
-            try:
-                logger.info(f"Attempting to load TPU as {device_config['device']}")
-                edge_tpu_delegate = load_delegate("libedgetpu.so.1.0", device_config)
-                logger.info("TPU found")
-                self.interpreter = tflite.Interpreter(
-                    model_path=model_path or "/edgetpu_model.tflite",
-                    experimental_delegates=[edge_tpu_delegate],
-                )
-            except ValueError:
-                logger.error(
-                    "No EdgeTPU was detected. If you do not have a Coral device yet, you must configure CPU detectors."
-                )
-                raise
+        if self.tf_device == "hailo":
+            self.interpreter = hailo()
         else:
-            logger.warning(
-                "CPU detectors are not recommended and should only be used for testing or for trial purposes."
-            )
-            self.interpreter = tflite.Interpreter(
-                model_path=model_path or "/cpu_model.tflite", num_threads=num_threads
-            )
+            if self.tf_device != "cpu":
+                try:
+                    logger.info(f"Attempting to load TPU as {device_config['device']}")
+                    edge_tpu_delegate = load_delegate(
+                        "libedgetpu.so.1.0", device_config
+                    )
+                    logger.info("TPU found")
+                    self.interpreter = tflite.Interpreter(
+                        model_path=model_path or "/edgetpu_model.tflite",
+                        experimental_delegates=[edge_tpu_delegate],
+                    )
+                except ValueError:
+                    logger.error(
+                        "No EdgeTPU was detected. If you do not have a Coral device yet, you must configure CPU detectors."
+                    )
+                    raise
+            else:
+                logger.warning(
+                    "CPU detectors are not recommended and should only be used for testing or for trial purposes."
+                )
+                self.interpreter = tflite.Interpreter(
+                    model_path=model_path or "/cpu_model.tflite",
+                    num_threads=num_threads,
+                )
 
-        self.interpreter.allocate_tensors()
+            self.interpreter.allocate_tensors()
 
-        self.tensor_input_details = self.interpreter.get_input_details()
-        self.tensor_output_details = self.interpreter.get_output_details()
+            self.tensor_input_details = self.interpreter.get_input_details()
+            self.tensor_output_details = self.interpreter.get_output_details()
 
     def detect(self, tensor_input, threshold=0.4):
         detections = []
-
         raw_detections = self.detect_raw(tensor_input)
 
         for d in raw_detections:
@@ -100,15 +107,28 @@ class LocalObjectDetector(ObjectDetector):
         return detections
 
     def detect_raw(self, tensor_input):
-        self.interpreter.set_tensor(self.tensor_input_details[0]["index"], tensor_input)
-        self.interpreter.invoke()
+        if self.tf_device == "hailo":
+            dets = self.interpreter.run(tensor_input)
+            count = dets["num_detections"]
+            scores = dets["scores"]
+            class_ids = dets["classes"] - 1  # Hailo classes are shifted by 1
+            boxes = dets["boxes"]
+        else:
+            self.interpreter.set_tensor(
+                self.tensor_input_details[0]["index"], tensor_input
+            )
+            self.interpreter.invoke()
 
-        boxes = self.interpreter.tensor(self.tensor_output_details[0]["index"])()[0]
-        class_ids = self.interpreter.tensor(self.tensor_output_details[1]["index"])()[0]
-        scores = self.interpreter.tensor(self.tensor_output_details[2]["index"])()[0]
-        count = int(
-            self.interpreter.tensor(self.tensor_output_details[3]["index"])()[0]
-        )
+            boxes = self.interpreter.tensor(self.tensor_output_details[0]["index"])()[0]
+            class_ids = self.interpreter.tensor(
+                self.tensor_output_details[1]["index"]
+            )()[0]
+            scores = self.interpreter.tensor(self.tensor_output_details[2]["index"])()[
+                0
+            ]
+            count = int(
+                self.interpreter.tensor(self.tensor_output_details[3]["index"])()[0]
+            )
 
         detections = np.zeros((20, 6), np.float32)
 
@@ -237,7 +257,7 @@ class EdgeTPUProcess:
                 self.num_threads,
             ),
         )
-        self.detect_process.daemon = True
+        # self.detect_process.daemon = True
         self.detect_process.start()
 
 

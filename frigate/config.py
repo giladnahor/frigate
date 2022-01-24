@@ -37,6 +37,7 @@ class FrigateBaseModel(BaseModel):
 class DetectorTypeEnum(str, Enum):
     edgetpu = "edgetpu"
     cpu = "cpu"
+    hailo = "hailo"
 
 
 class DetectorConfig(FrigateBaseModel):
