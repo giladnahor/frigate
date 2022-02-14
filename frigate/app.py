@@ -27,7 +27,7 @@ from frigate.output import output_frames
 from frigate.record import RecordingCleanup, RecordingMaintainer
 from frigate.stats import StatsEmitter, stats_init
 from frigate.version import VERSION
-from frigate.video import capture_camera, track_camera
+from frigate.video import capture_camera, track_camera, capture_gstreamer_frames
 from frigate.watchdog import FrigateWatchdog
 
 logger = logging.getLogger(__name__)
@@ -152,7 +152,6 @@ class FrigateApp:
         model_shape = (self.config.model.height, self.config.model.width)
         for name in self.config.cameras.keys():
             self.detection_out_events[name] = mp.Event()
-
             try:
                 shm_in = mp.shared_memory.SharedMemory(
                     name=name,
@@ -234,6 +233,8 @@ class FrigateApp:
     def start_camera_processors(self):
         model_shape = (self.config.model.height, self.config.model.width)
         for name, config in self.config.cameras.items():
+            if name not in self.detection_out_events.keys():
+                self.detection_out_events[name] = None
             camera_process = mp.Process(
                 target=track_camera,
                 name=f"camera_processor:{name}",
@@ -246,6 +247,7 @@ class FrigateApp:
                     self.detection_out_events[name],
                     self.detected_frames_queue,
                     self.camera_metrics[name],
+                    self.config.gstreamer.enabled,
                 ),
             )
             camera_process.daemon = True
@@ -264,6 +266,20 @@ class FrigateApp:
             self.camera_metrics[name]["capture_process"] = capture_process
             capture_process.start()
             logger.info(f"Capture process started for {name}: {capture_process.pid}")
+
+    def start_gstreamer_capture_processes(self):
+        # replaces start_camera_capture_processes
+        capture_process = mp.Process(
+            target=capture_gstreamer_frames,
+            name=f"capture_gstreamer_frames",
+            args=(self.config, self.camera_metrics),
+        )
+        # capture_process.daemon = True
+        # setting all cameras pids to the same one
+        for name in self.config.cameras.keys():
+            self.camera_metrics[name]["capture_process"] = capture_process
+        capture_process.start()
+        logger.info(f"Capture process started for : {capture_process.pid}")
 
     def start_event_processor(self):
         self.event_processor = EventProcessor(
@@ -333,11 +349,17 @@ class FrigateApp:
             print(e)
             self.log_process.terminate()
             sys.exit(1)
-        self.start_detectors()
+        if not self.config.gstreamer.enabled:
+            self.start_detectors()
         self.start_video_output_processor()
         self.start_detected_frames_processor()
         self.start_camera_processors()
-        self.start_camera_capture_processes()
+
+        if not self.config.gstreamer.enabled:
+            self.start_camera_capture_processes()
+        else:
+            self.start_gstreamer_capture_processes()
+
         self.init_stats()
         self.init_web_server()
         self.start_mqtt_relay()

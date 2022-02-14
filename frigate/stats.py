@@ -55,6 +55,11 @@ def stats_snapshot(stats_tracking):
             "detection_start": detector.detection_start.value,
             "pid": detector.detect_process.pid,
         }
+    stats["detectors"]["dummy"] = {
+        "inference_speed": 0,
+        "detection_start": 0,
+        "pid": 0,
+    }
     stats["detection_fps"] = round(total_detection_fps, 2)
 
     stats["service"] = {
@@ -71,7 +76,9 @@ def stats_snapshot(stats_tracking):
             "free": round(storage_stats.free / 1000000, 1),
             "mount_type": get_fs_type(path),
         }
-
+    # import numpy as np
+    # a = np.load("stats.npy", allow_pickle=True)
+    # np.save("stats_gst.npy", stats)
     return stats
 
 

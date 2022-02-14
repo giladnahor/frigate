@@ -14,7 +14,7 @@ from typing import Dict, List
 from cv2 import cv2
 import numpy as np
 
-from frigate.config import CameraConfig
+from frigate.config import CameraConfig, FrigateConfig
 from frigate.edgetpu import RemoteObjectDetector
 from frigate.log import LogPipe
 from frigate.motion import MotionDetector
@@ -28,6 +28,9 @@ from frigate.util import (
     listen,
     yuv_region_2_rgb,
 )
+from frigate.zmq_wrapper import ClientSocket, RecvData
+import frigate.detection_pb2 as detection_pb2
+from frigate.protobuf_common import get_image
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +175,110 @@ def capture_frames(
 
         # add to the queue
         frame_queue.put(current_frame.value)
+
+
+def capture_gstreamer_frames(
+    config: FrigateConfig,
+    camera_metrics,
+):
+    frame_manager = SharedMemoryFrameManager()
+    cameras_names = config.cameras.keys()
+
+    # handle kill requests
+    stop_event = mp.Event()
+
+    def receiveSignal(signalNumber, frame):
+        stop_event.set()
+
+    signal.signal(signal.SIGTERM, receiveSignal)
+    signal.signal(signal.SIGINT, receiveSignal)
+
+    # threading.current_thread().name = f"process:{name}"
+    # setproctitle(f"frigate.process:{name}")
+    listen()
+
+    # Should be per camera
+    frame_rate_counters = {}
+    skipped_eps_counters = {}
+    for camera_name in cameras_names:
+        frame_rate_counters[camera_name] = EventsPerSecond()
+        frame_rate_counters[camera_name].start()
+        skipped_eps_counters[camera_name] = EventsPerSecond()
+        skipped_eps_counters[camera_name].start()
+
+    zmq_port = 5557
+    zmq_ip = "127.0.0.1"
+    socket = ClientSocket(zmq_port, zmq_ip)
+
+    # This map the stream ID to camera name
+    streams_map = {}
+
+    while not stop_event.is_set():
+        buf = socket.recv()
+        zmq_frame = detection_pb2.Frame().FromString(buf)
+        frame = get_image(zmq_frame)
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2YUV_I420)
+        stream_id = zmq_frame.stream_name
+        detections = []
+
+        # temporary hack to assign cameras to streams
+        if stream_id not in streams_map.keys():
+            # search for unused camera name
+            for camera_name in cameras_names:
+                if camera_name not in streams_map.values():
+                    streams_map[stream_id] = camera_name
+                    break
+            logger.info(f"Got unexpected camera {stream_id} from Gstreamer")
+            continue
+        camera_name = streams_map[stream_id]
+        print(camera_name)
+        for detection in zmq_frame.Detections:
+            label = detection.label
+            if label != "person":
+                continue
+            xmin = int(detection.xmin * zmq_frame.Width)
+            ymin = int(detection.ymin * zmq_frame.Height)
+            xmax = int(detection.xmax * zmq_frame.Width)
+            ymax = int(detection.ymax * zmq_frame.Height)
+            det = (
+                label,
+                detection.score,
+                (xmin, ymin, xmax, ymax),
+                (xmax - xmin) * (ymax - ymin),
+                (0, 0, 640, 640),  # region,
+            )
+            detections.append(det)
+
+        frame_queue = camera_metrics[camera_name]["frame_queue"]
+
+        frame_time = datetime.datetime.now().timestamp()
+        frame_name = f"{camera_name}{frame_time}"
+        frame_shape = frame.shape
+        frame_size = frame_shape[0] * frame_shape[1]
+        frame_buffer = frame_manager.create(frame_name, frame_size)
+        frame_buffer[:] = frame.tobytes()
+
+        camera_metrics[camera_name]["camera_fps"].value = frame_rate_counters[
+            camera_name
+        ].eps()
+        camera_metrics[camera_name]["skipped_fps"].value = skipped_eps_counters[
+            camera_name
+        ].eps()
+
+        frame_rate_counters[camera_name].update()
+
+        # if the queue is full, skip this frame
+        if frame_queue.full():
+            skipped_eps_counters[camera_name].update()
+            frame_manager.delete(frame_name)
+            continue
+
+        # close the frame
+        frame_manager.close(frame_name)
+
+        # add to the queue
+        frame_queue.put((frame_time, detections))
+        time.sleep(0)  # allow for context switch
 
 
 class CameraWatchdog(threading.Thread):
@@ -327,9 +434,10 @@ def track_camera(
     model_shape,
     labelmap,
     detection_queue,
-    result_connection,
-    detected_objects_queue,
+    result_connection,  #  self.detection_out_events[name],
+    detected_objects_queue,  # self.detected_frames_queue,
     process_info,
+    gstreamer_enabled,
 ):
     stop_event = mp.Event()
 
@@ -342,7 +450,6 @@ def track_camera(
     threading.current_thread().name = f"process:{name}"
     setproctitle(f"frigate.process:{name}")
     listen()
-
     frame_queue = process_info["frame_queue"]
     detection_enabled = process_info["detection_enabled"]
 
@@ -351,30 +458,48 @@ def track_camera(
     object_filters = config.objects.filters
 
     motion_detector = MotionDetector(frame_shape, config.motion)
-    object_detector = RemoteObjectDetector(
-        name, labelmap, detection_queue, result_connection, model_shape
-    )
+    if not gstreamer_enabled:
+        object_detector = RemoteObjectDetector(
+            name, labelmap, detection_queue, result_connection, model_shape
+        )
 
     object_tracker = ObjectTracker(config.detect)
 
     frame_manager = SharedMemoryFrameManager()
-
-    process_frames(
-        name,
-        frame_queue,
-        frame_shape,
-        model_shape,
-        frame_manager,
-        motion_detector,
-        object_detector,
-        object_tracker,
-        detected_objects_queue,
-        process_info,
-        objects_to_track,
-        object_filters,
-        detection_enabled,
-        stop_event,
-    )
+    if not gstreamer_enabled:
+        process_frames(
+            name,
+            frame_queue,
+            frame_shape,
+            model_shape,
+            frame_manager,
+            motion_detector,
+            object_detector,
+            object_tracker,
+            detected_objects_queue,
+            process_info,
+            objects_to_track,
+            object_filters,
+            detection_enabled,
+            stop_event,
+        )
+    else:
+        process_frames_from_gstreamer(
+            name,
+            frame_queue,
+            frame_shape,
+            model_shape,
+            frame_manager,
+            motion_detector,
+            # object_detector,
+            object_tracker,
+            detected_objects_queue,
+            process_info,
+            objects_to_track,
+            object_filters,
+            detection_enabled,
+            stop_event,
+        )
 
     logger.info(f"{name}: exiting subprocess")
 
@@ -608,4 +733,100 @@ def process_frames(
                 )
             )
             detection_fps.value = object_detector.fps.eps()
+            frame_manager.close(f"{camera_name}{frame_time}")
+
+
+def process_frames_from_gstreamer(
+    camera_name: str,
+    frame_queue: mp.Queue,
+    frame_shape,  # (h, w)
+    model_shape,
+    frame_manager: FrameManager,
+    motion_detector: MotionDetector,
+    object_tracker: ObjectTracker,
+    detected_objects_queue: mp.Queue,
+    process_info: Dict,
+    objects_to_track: List[str],
+    object_filters,
+    detection_enabled: mp.Value,
+    stop_event,
+    exit_on_empty: bool = False,
+):
+
+    fps = process_info["process_fps"]
+    detection_fps = process_info["detection_fps"]
+    current_frame_time = process_info["detection_frame"]
+
+    fps_tracker = EventsPerSecond()
+    fps_tracker.start()
+
+    while not stop_event.is_set():
+        if exit_on_empty and frame_queue.empty():
+            logger.info(f"Exiting track_objects...")
+            break
+
+        try:
+            (frame_time, detections) = frame_queue.get(True, 10)
+        except queue.Empty:
+            continue
+
+        current_frame_time.value = frame_time
+
+        # frame = frame_manager.get(
+        #     f"{camera_name}{frame_time}", (frame_shape[0] * 3 // 2, frame_shape[1])
+        # )
+
+        # if frame is None:
+        #     logger.info(f"{camera_name}: frame {frame_time} is not in memory store.")
+        #     continue
+
+        if not detection_enabled.value:
+            fps.value = fps_tracker.eps()
+            object_tracker.match_and_update(frame_time, [])
+            detected_objects_queue.put(
+                (camera_name, frame_time, object_tracker.tracked_objects, [], [])
+            )
+            detection_fps.value = object_detector.fps.eps()
+            frame_manager.close(f"{camera_name}{frame_time}")
+            continue
+
+        # look for motion
+        # motion_boxes = motion_detector.detect(frame)
+        motion_boxes = [(0, 0, frame_shape[0], frame_shape[1])]
+
+        # only get the tracked object boxes that intersect with motion
+        tracked_object_boxes = [
+            obj["box"]
+            for obj in object_tracker.tracked_objects.values()
+            if intersects_any(obj["box"], motion_boxes)
+        ]
+
+        # # Limit to the detections overlapping with motion areas
+        # # to avoid picking up stationary background objects
+        # detections_with_motion = [
+        #     d for d in detections if intersects_any(d[2], motion_boxes)
+        # ]
+        detections_with_motion = detections
+        regions = [(0, 0, frame_shape[1], frame_shape[0])]
+
+        # now that we have refined our detections, we need to track objects
+        object_tracker.match_and_update(frame_time, detections_with_motion)
+
+        # add to the queue if not full
+        if detected_objects_queue.full():
+            frame_manager.delete(f"{camera_name}{frame_time}")
+            continue
+        else:
+            fps_tracker.update()
+            fps.value = fps_tracker.eps()
+            detected_objects_queue.put(
+                (
+                    camera_name,
+                    frame_time,
+                    object_tracker.tracked_objects,
+                    motion_boxes,
+                    regions,
+                )
+            )
+            detection_fps.value = 0  # object_detector.fps.eps()
             frame_manager.close(f"{camera_name}{frame_time}")

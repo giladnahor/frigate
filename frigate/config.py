@@ -659,6 +659,10 @@ class LoggerConfig(FrigateBaseModel):
     )
 
 
+class GstreamerConfig(FrigateBaseModel):
+    enabled: bool = Field(default=False, title="Use Gstreamer pipeline")
+
+
 class FrigateConfig(FrigateBaseModel):
     mqtt: MqttConfig = Field(title="MQTT Configuration.")
     database: DatabaseConfig = Field(
@@ -676,6 +680,9 @@ class FrigateConfig(FrigateBaseModel):
     )
     logger: LoggerConfig = Field(
         default_factory=LoggerConfig, title="Logging configuration."
+    )
+    gstreamer: GstreamerConfig = Field(
+        default_factory=GstreamerConfig, title="Global Gstreamer configuration."
     )
     record: RecordConfig = Field(
         default_factory=RecordConfig, title="Global record configuration."
