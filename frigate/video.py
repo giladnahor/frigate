@@ -28,7 +28,7 @@ from frigate.util import (
     listen,
     yuv_region_2_rgb,
 )
-from frigate.zmq_wrapper import ClientSocket, RecvData
+from frigate.zmq_wrapper import ClientSocket
 import frigate.detection_pb2 as detection_pb2
 from frigate.protobuf_common import get_image
 
@@ -177,6 +177,88 @@ def capture_frames(
         frame_queue.put(current_frame.value)
 
 
+# def capture_gstreamer_frames(
+#     camera_name,
+#     camera_config: CameraConfig,
+#     camera_metrics,
+# ):
+#     frame_manager = SharedMemoryFrameManager()
+
+#     # handle kill requests
+#     stop_event = mp.Event()
+
+#     def receiveSignal(signalNumber, frame):
+#         stop_event.set()
+
+#     signal.signal(signal.SIGTERM, receiveSignal)
+#     signal.signal(signal.SIGINT, receiveSignal)
+
+#     threading.current_thread().name = f"process:{camera_name}"
+#     setproctitle(f"frigate.process:{camera_name}")
+#     listen()
+
+#     frame_rate_counter = EventsPerSecond()
+#     skipped_eps_counter = EventsPerSecond()
+#     frame_rate_counter.start()
+#     skipped_eps_counter.start()
+#     frame_queue = camera_metrics["frame_queue"]
+
+#     zmq_port = camera_config.detect.zmq_port
+#     print(f"Starting zmq server on port {zmq_port}")
+#     zmq_ip = "127.0.0.1"
+#     socket = ClientSocket(zmq_port, zmq_ip)
+
+#     while not stop_event.is_set():
+#         buf = socket.recv()
+#         zmq_frame = detection_pb2.Frame().FromString(buf)
+#         frame = get_image(zmq_frame)
+#         stream_id = zmq_frame.stream_name
+#         detections = []
+
+#         for detection in zmq_frame.Detections:
+#             label = detection.label
+#             if label != "person":
+#                 continue
+#             xmin = int(detection.xmin * zmq_frame.Width)
+#             ymin = int(detection.ymin * zmq_frame.Height)
+#             xmax = int(detection.xmax * zmq_frame.Width)
+#             ymax = int(detection.ymax * zmq_frame.Height)
+#             det = (
+#                 label,
+#                 detection.score,
+#                 (xmin, ymin, xmax, ymax),
+#                 (xmax - xmin) * (ymax - ymin),
+#                 (0, 0, 640, 640),  # region,
+#             )
+#             detections.append(det)
+
+#         frame_time = datetime.datetime.now().timestamp()
+#         frame_name = f"{camera_name}{frame_time}"
+#         frame_shape = frame.shape
+#         frame_size = frame_shape[0] * frame_shape[1]
+#         frame_buffer = frame_manager.create(frame_name, frame_size)
+#         frame_buffer[:] = frame.tobytes()
+#         print(f"Created frame {frame_name}")
+#         camera_metrics["camera_fps"].value = frame_rate_counter.eps()
+#         camera_metrics["skipped_fps"].value = skipped_eps_counter.eps()
+
+#         frame_rate_counter.update()
+
+#         # if the queue is full, skip this frame
+#         if frame_queue.full():
+#             skipped_eps_counter.update()
+#             frame_manager.delete(frame_name)
+#             print(f"Deleted frame {frame_name}")
+#             continue
+
+#         # close the frame
+#         frame_manager.close(frame_name)
+#         print(f"Commited frame {frame_name}")
+#         # add to the queue
+#         frame_queue.put((frame_time, detections))
+#         time.sleep(0)  # allow for context switch
+
+
 def capture_gstreamer_frames(
     config: FrigateConfig,
     camera_metrics,
@@ -206,7 +288,7 @@ def capture_gstreamer_frames(
         skipped_eps_counters[camera_name] = EventsPerSecond()
         skipped_eps_counters[camera_name].start()
 
-    zmq_port = 5557
+    zmq_port = 5560
     zmq_ip = "127.0.0.1"
     socket = ClientSocket(zmq_port, zmq_ip)
 
@@ -217,7 +299,7 @@ def capture_gstreamer_frames(
         buf = socket.recv()
         zmq_frame = detection_pb2.Frame().FromString(buf)
         frame = get_image(zmq_frame)
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2YUV_I420)
+        # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2YUV_I420)
         stream_id = zmq_frame.stream_name
         detections = []
 
@@ -231,7 +313,6 @@ def capture_gstreamer_frames(
             logger.info(f"Got unexpected camera {stream_id} from Gstreamer")
             continue
         camera_name = streams_map[stream_id]
-        print(camera_name)
         for detection in zmq_frame.Detections:
             label = detection.label
             if label != "person":
@@ -257,7 +338,7 @@ def capture_gstreamer_frames(
         frame_size = frame_shape[0] * frame_shape[1]
         frame_buffer = frame_manager.create(frame_name, frame_size)
         frame_buffer[:] = frame.tobytes()
-
+        # print(f"Created frame {frame_name}")
         camera_metrics[camera_name]["camera_fps"].value = frame_rate_counters[
             camera_name
         ].eps()
@@ -271,11 +352,12 @@ def capture_gstreamer_frames(
         if frame_queue.full():
             skipped_eps_counters[camera_name].update()
             frame_manager.delete(frame_name)
+            # print(f"Deleted frame {frame_name}")
             continue
 
         # close the frame
         frame_manager.close(frame_name)
-
+        # print(f"Commited frame {frame_name}")
         # add to the queue
         frame_queue.put((frame_time, detections))
         time.sleep(0)  # allow for context switch

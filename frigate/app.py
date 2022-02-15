@@ -267,6 +267,19 @@ class FrigateApp:
             capture_process.start()
             logger.info(f"Capture process started for {name}: {capture_process.pid}")
 
+    # def start_gstreamer_capture_processes(self):
+    #     # replaces start_camera_capture_processes
+    #     for name, config in self.config.cameras.items():
+    #         capture_process = mp.Process(
+    #             target=capture_gstreamer_frames,
+    #             name=f"camera_capture:{name}",
+    #             args=(name, config, self.camera_metrics[name]),
+    #         )
+    #         capture_process.daemon = True
+    #         self.camera_metrics[name]["capture_process"] = capture_process
+    #         capture_process.start()
+    #         logger.info(f"Capture process started for {name}: {capture_process.pid}")
+
     def start_gstreamer_capture_processes(self):
         # replaces start_camera_capture_processes
         capture_process = mp.Process(

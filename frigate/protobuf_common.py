@@ -1,3 +1,5 @@
+import cv2
+
 import frigate.detection_pb2 as detection_pb2
 from google.protobuf.json_format import MessageToJson
 import numpy as np
@@ -7,17 +9,22 @@ def add_image(frame: detection_pb2.Frame, img):
     shape = img.shape
     frame.data = img.tobytes()
     frame.type = frame.RGB
-    frame.Width = shape[0]
-    frame.Height = shape[1]
-    if len(shape) > 2:
-        frame.Channels = shape[2]
-    else:
-        frame.Channels = 0
+    frame.Width = shape[1]
+    frame.Height = shape[0]
 
 
-def get_image(frame: detection_pb2.Frame):
+def get_image(frame: detection_pb2.Frame, outputRGB=False):
     img = np.frombuffer(frame.data, dtype=np.uint8)
-    img = img.reshape(frame.Height, frame.Width, frame.Channels)
+    if frame.type == frame.FrameType.RGB:
+        img = img.reshape(frame.Height, frame.Width, 3)
+    if frame.type == frame.FrameType.YUY2:
+        img = img.reshape(frame.Height, frame.Width, 2)
+        if outputRGB:
+            img = cv2.cvtColor(img, cv2.COLOR_YUV2RGB_YUY2)
+    if frame.type == frame.FrameType.I420:
+        img = img.reshape(int(frame.Height * 1.5), frame.Width)
+        if outputRGB:
+            img = cv2.cvtColor(img, cv2.COLOR_YUV2RGB_I420)
     return img
 
 
@@ -35,7 +42,7 @@ def example():
         det.xmax = i
         det.ymin = i
         det.ymax = i
-        det.label = "person"
+        det.det_class = i
         det.score = i
 
     # serialize

@@ -160,6 +160,7 @@ class DetectConfig(FrigateBaseModel):
         default=5, title="Number of frames per second to process through detection."
     )
     enabled: bool = Field(default=True, title="Detection Enabled.")
+    zmq_port: int = Field(default=5560, title="Used when detections are sent via ZMQ.")
     max_disappeared: Optional[int] = Field(
         title="Maximum number of frames the object can dissapear before detection ends."
     )
