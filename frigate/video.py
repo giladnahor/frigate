@@ -28,7 +28,9 @@ from frigate.util import (
     listen,
     yuv_region_2_rgb,
 )
+
 from frigate.zmq_wrapper import ClientSocket
+import zmq
 import frigate.detection_pb2 as detection_pb2
 from frigate.protobuf_common import get_image
 
@@ -199,13 +201,7 @@ def capture_frames(
 
 #     frame_rate_counter = EventsPerSecond()
 #     skipped_eps_counter = EventsPerSecond()
-#     frame_rate_counter.start()
-#     skipped_eps_counter.start()
-#     frame_queue = camera_metrics["frame_queue"]
-
-#     zmq_port = camera_config.detect.zmq_port
-#     print(f"Starting zmq server on port {zmq_port}")
-#     zmq_ip = "127.0.0.1"
+#     frame_rate_counter.start()zmq
 #     socket = ClientSocket(zmq_port, zmq_ip)
 
 #     while not stop_event.is_set():
@@ -227,10 +223,7 @@ def capture_frames(
 #                 label,
 #                 detection.score,
 #                 (xmin, ymin, xmax, ymax),
-#                 (xmax - xmin) * (ymax - ymin),
-#                 (0, 0, 640, 640),  # region,
-#             )
-#             detections.append(det)
+#                 (xmax - xmin) * (ymax - ymin),zmq
 
 #         frame_time = datetime.datetime.now().timestamp()
 #         frame_name = f"{camera_name}{frame_time}"
@@ -253,10 +246,7 @@ def capture_frames(
 
 #         # close the frame
 #         frame_manager.close(frame_name)
-#         print(f"Commited frame {frame_name}")
-#         # add to the queue
-#         frame_queue.put((frame_time, detections))
-#         time.sleep(0)  # allow for context switch
+#         print(f"Commited frame {frame_name}")zmq
 
 
 def capture_gstreamer_frames(
@@ -288,15 +278,28 @@ def capture_gstreamer_frames(
         skipped_eps_counters[camera_name] = EventsPerSecond()
         skipped_eps_counters[camera_name].start()
 
-    zmq_port = 5560
+    zmq_port = 5557
     zmq_ip = "127.0.0.1"
-    socket = ClientSocket(zmq_port, zmq_ip)
+
+    # TBD
+    # socket = ClientSocket(zmq_port, zmq_ip)
+    context = zmq.Context()
+    socket = context.socket(zmq.SUB)
+    # We must declare the socket as of type SUBSCRIBER, and pass a prefix filter.
+    # Here, the filter is the empty string, which means we receive all messages.
+    # We may subscribe to several filters, thus receiving from all.
+    socket.setsockopt(zmq.SUBSCRIBE, b"camera")
+    socket.setsockopt(zmq.RCVHWM, 10)  # limit Q size
+    # socket.setsockopt(zmq.CONFLATE, 1)  # last msg only.
+    socket.connect("tcp://{}:{}".format(zmq_ip, zmq_port))
 
     # This map the stream ID to camera name
     streams_map = {}
 
     while not stop_event.is_set():
-        buf = socket.recv()
+        # buf = socket.recv() #TBD
+        [addr, buf] = socket.recv_multipart()
+
         zmq_frame = detection_pb2.Frame().FromString(buf)
         frame = get_image(zmq_frame)
         # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2YUV_I420)

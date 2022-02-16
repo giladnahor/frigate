@@ -5,7 +5,7 @@ services:
     user: vscode
     privileged: true
     network_mode: host
-    shm_size: "256mb"
+    shm_size: "1024mb"
     build:
       context: .
       dockerfile: docker/Dockerfile.dev
