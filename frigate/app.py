@@ -152,6 +152,7 @@ class FrigateApp:
         model_shape = (self.config.model.height, self.config.model.width)
         for name in self.config.cameras.keys():
             self.detection_out_events[name] = mp.Event()
+
             try:
                 shm_in = mp.shared_memory.SharedMemory(
                     name=name,
@@ -180,16 +181,6 @@ class FrigateApp:
                     model_path,
                     model_shape,
                     "cpu",
-                    detector.num_threads,
-                )
-            if detector.type == DetectorTypeEnum.hailo:
-                self.detectors[name] = EdgeTPUProcess(
-                    name,
-                    self.detection_queue,
-                    self.detection_out_events,
-                    model_path,
-                    model_shape,
-                    "hailo",
                     detector.num_threads,
                 )
             if detector.type == DetectorTypeEnum.edgetpu:

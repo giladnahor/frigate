@@ -8,7 +8,7 @@ services:
     shm_size: "1024mb"
     build:
       context: .
-      dockerfile: docker/Dockerfile.dev
+      dockerfile: docker/Dockerfile.amd64
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - .:/lab/frigate:cached
@@ -26,9 +26,8 @@ services:
       - "5557:5557"
       - "5558:5558"
     entrypoint: ["sudo", "/init"]
-    command: /bin/sh -c "while sleep 1000; do :; done"
-
-
+    command: /bin/sh -c "python3 -u -m frigate"
+        
   mqtt:
     container_name: mqtt
     image: eclipse-mosquitto:1.6

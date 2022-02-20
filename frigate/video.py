@@ -29,7 +29,6 @@ from frigate.util import (
     yuv_region_2_rgb,
 )
 
-from frigate.zmq_wrapper import ClientSocket
 import zmq
 import frigate.detection_pb2 as detection_pb2
 from frigate.protobuf_common import get_image
@@ -288,7 +287,7 @@ def capture_gstreamer_frames(
     # We must declare the socket as of type SUBSCRIBER, and pass a prefix filter.
     # Here, the filter is the empty string, which means we receive all messages.
     # We may subscribe to several filters, thus receiving from all.
-    socket.setsockopt(zmq.SUBSCRIBE, b"camera")
+    socket.setsockopt(zmq.SUBSCRIBE, b"")
     socket.setsockopt(zmq.RCVHWM, 10)  # limit Q size
     # socket.setsockopt(zmq.CONFLATE, 1)  # last msg only.
     socket.connect("tcp://{}:{}".format(zmq_ip, zmq_port))
@@ -297,8 +296,8 @@ def capture_gstreamer_frames(
     streams_map = {}
 
     while not stop_event.is_set():
-        # buf = socket.recv() #TBD
-        [addr, buf] = socket.recv_multipart()
+        buf = socket.recv()  # TBD
+        # [addr, buf] = socket.recv_multipart()
 
         zmq_frame = detection_pb2.Frame().FromString(buf)
         frame = get_image(zmq_frame)

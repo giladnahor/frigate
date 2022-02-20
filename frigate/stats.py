@@ -76,9 +76,7 @@ def stats_snapshot(stats_tracking):
             "free": round(storage_stats.free / 1000000, 1),
             "mount_type": get_fs_type(path),
         }
-    # import numpy as np
-    # a = np.load("stats.npy", allow_pickle=True)
-    # np.save("stats_gst.npy", stats)
+
     return stats
 
 

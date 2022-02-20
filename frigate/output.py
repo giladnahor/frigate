@@ -12,6 +12,7 @@ from wsgiref.simple_server import make_server
 
 import cv2
 import numpy as np
+
 from setproctitle import setproctitle
 from ws4py.server.wsgirefserver import (
     WebSocketWSGIHandler,
@@ -23,6 +24,10 @@ from ws4py.websocket import WebSocket
 
 from frigate.config import BirdseyeModeEnum, FrigateConfig
 from frigate.util import SharedMemoryFrameManager, copy_yuv_to_position, get_yuv_crop
+
+import zmq
+import frigate.detection_pb2 as detection_pb2
+from frigate.protobuf_common import get_image
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +155,19 @@ class BirdsEyeFrameManager:
         self.active_cameras = set()
         self.layout_dim = 0
         self.last_output_time = 0.0
+
+        self.init_zmq()
+
+    def init_zmq(self):
+        zmq_port = 5558  # TBD from config
+        zmq_ip = "127.0.0.1"
+
+        context = zmq.Context()
+        self.socket = context.socket(zmq.SUB)
+        self.socket.setsockopt(zmq.SUBSCRIBE, b"")
+        self.socket.setsockopt(zmq.RCVHWM, 10)  # limit Q size
+        self.socket.setsockopt(zmq.CONFLATE, 1)  # last msg only.
+        self.socket.connect("tcp://{}:{}".format(zmq_ip, zmq_port))
 
     def clear_frame(self):
         logger.debug(f"Clearing the birdseye frame")
@@ -303,6 +321,13 @@ class BirdsEyeFrameManager:
 
         return True
 
+    def update_zmq_frame(self):
+        buf = self.socket.recv()
+        zmq_frame = detection_pb2.Frame().FromString(buf)
+        frame = get_image(zmq_frame)
+        self.frame = frame
+        return True
+
     def update(self, camera, object_count, motion_count, frame_time, frame) -> bool:
 
         # update the last active frame for the camera
@@ -312,12 +337,13 @@ class BirdsEyeFrameManager:
 
         now = datetime.datetime.now().timestamp()
 
-        # limit output to 10 fps
-        if (now - self.last_output_time) < 1 / 10:
-            return False
+        # # limit output to 10 fps
+        # if (now - self.last_output_time) < 1 / 10:
+        #     return False
 
         # if the frame was updated or the fps is too low, send frame
-        if self.update_frame() or (now - self.last_output_time) > 1:
+        # if self.update_frame() or (now - self.last_output_time) > 1:
+        if self.update_zmq_frame() or (now - self.last_output_time) > 1:
             self.last_output_time = now
             return True
         return False

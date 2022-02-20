@@ -37,7 +37,6 @@ class FrigateBaseModel(BaseModel):
 class DetectorTypeEnum(str, Enum):
     edgetpu = "edgetpu"
     cpu = "cpu"
-    hailo = "hailo"
 
 
 class DetectorConfig(FrigateBaseModel):
@@ -566,7 +565,6 @@ class CameraConfig(FrigateBaseModel):
                 if isinstance(self.ffmpeg.output_args.record, list)
                 else self.ffmpeg.output_args.record.split(" ")
             )
-
             ffmpeg_output_args = (
                 record_args
                 + [f"{os.path.join(CACHE_DIR, self.name)}-%Y%m%d%H%M%S.mp4"]
