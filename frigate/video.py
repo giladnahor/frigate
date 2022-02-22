@@ -31,7 +31,7 @@ from frigate.util import (
 
 import zmq
 import frigate.detection_pb2 as detection_pb2
-from frigate.protobuf_common import get_image
+from frigate.protobuf_common import get_image, fps_measure
 
 logger = logging.getLogger(__name__)
 
@@ -289,12 +289,12 @@ def capture_gstreamer_frames(
     # We may subscribe to several filters, thus receiving from all.
     socket.setsockopt(zmq.SUBSCRIBE, b"")
     socket.setsockopt(zmq.RCVHWM, 10)  # limit Q size
-    # socket.setsockopt(zmq.CONFLATE, 1)  # last msg only.
+    socket.setsockopt(zmq.CONFLATE, 1)  # last msg only.
     socket.connect("tcp://{}:{}".format(zmq_ip, zmq_port))
 
     # This map the stream ID to camera name
     streams_map = {}
-
+    fps = fps_measure(None, avg_period=2, verbose=True)
     while not stop_event.is_set():
         buf = socket.recv()  # TBD
         # [addr, buf] = socket.recv_multipart()
@@ -362,6 +362,7 @@ def capture_gstreamer_frames(
         # print(f"Commited frame {frame_name}")
         # add to the queue
         frame_queue.put((frame_time, detections))
+        fps.update()
         time.sleep(0)  # allow for context switch
 
 
