@@ -319,10 +319,11 @@ def capture_gstreamer_frames(
             label = detection.label
             if label != "person":
                 continue
-            xmin = int(detection.xmin * zmq_frame.Width)
-            ymin = int(detection.ymin * zmq_frame.Height)
-            xmax = int(detection.xmax * zmq_frame.Width)
-            ymax = int(detection.ymax * zmq_frame.Height)
+
+            xmin = int(np.clip(detection.xmin, 0, 1) * zmq_frame.Width)
+            ymin = int(np.clip(detection.ymin, 0, 1) * zmq_frame.Height)
+            xmax = int(np.clip(detection.xmax, 0, 1) * zmq_frame.Width)
+            ymax = int(np.clip(detection.ymax, 0, 1) * zmq_frame.Height)
             det = (
                 label,
                 detection.score,

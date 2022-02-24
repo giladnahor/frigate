@@ -36,7 +36,8 @@ RUN pip3 install \
     zeroconf \
     ws4py \
     protobuf \
-    zmq
+    zmq \
+    pyserial
 
 COPY --from=nginx /usr/local/nginx/ /usr/local/nginx/
 

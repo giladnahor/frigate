@@ -6,6 +6,8 @@ services:
     privileged: true
     network_mode: host
     shm_size: "1024mb"
+    group_add:
+      - dialout
     build:
       context: .
       dockerfile: docker/Dockerfile.amd64
@@ -14,8 +16,8 @@ services:
       - .:/lab/frigate:cached
       - ./config/config.yml:/config/config.yml:ro
       - ./debug:/media/frigate
-      - /dev/bus/usb:/dev/bus/usb
-      - /dev/dri:/dev/dri # for intel hwaccel, needs to be updated for your hardware
+      - /dev/:/dev/
+      # - /dev/dri:/dev/dri # for intel hwaccel, needs to be updated for your hardware
     ports:
       - "1935:1935"
       - "5000:5000"
@@ -27,7 +29,7 @@ services:
       - "5558:5558"
     entrypoint: ["sudo", "/init"]
     command: /bin/sh -c "python3 -u -m frigate"
-        
+
   mqtt:
     container_name: mqtt
     image: eclipse-mosquitto:1.6

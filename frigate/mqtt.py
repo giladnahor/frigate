@@ -14,6 +14,7 @@ from ws4py.websocket import WebSocket
 
 from frigate.config import FrigateConfig
 from frigate.util import restart_frigate
+from frigate.mqtt_arduino_client import mqtt_arduino_client
 
 logger = logging.getLogger(__name__)
 
@@ -89,16 +90,32 @@ def create_mqtt_client(config: FrigateConfig, camera_metrics):
         state_topic = f"{message.topic[:-4]}/state"
         client.publish(state_topic, payload, retain=True)
 
+    ARDUINO = True
+    if ARDUINO:  # TBD Arduino enabled from config
+        arduino = mqtt_arduino_client()
+        if arduino.connected:
+            logger.info("Arduino connected")
+
+        def on_zone_command(client, userdata, message):
+            payload = message.payload.decode()
+            logger.debug(f"on_zone_toggle: {message.topic} {payload}")
+            arduino.write(payload)
+
     def on_restart_command(client, userdata, message):
+        arduino.disconnect()
         restart_frigate()
 
     def on_connect(client, userdata, flags, rc):
         threading.current_thread().name = "mqtt"
         if rc != 0:
             if rc == 3:
-                logger.error("Unable to connect to MQTT server: MQTT Server unavailable")
+                logger.error(
+                    "Unable to connect to MQTT server: MQTT Server unavailable"
+                )
             elif rc == 4:
-                logger.error("Unable to connect to MQTT server: MQTT Bad username or password")
+                logger.error(
+                    "Unable to connect to MQTT server: MQTT Bad username or password"
+                )
             elif rc == 5:
                 logger.error("Unable to connect to MQTT server: MQTT Not authorized")
             else:
@@ -127,6 +144,10 @@ def create_mqtt_client(config: FrigateConfig, camera_metrics):
         )
         client.message_callback_add(
             f"{mqtt_config.topic_prefix}/{name}/detect/set", on_detect_command
+        )
+    if ARDUINO:
+        client.message_callback_add(
+            f"{mqtt_config.topic_prefix}/zone_0/person", on_zone_command
         )
 
     client.message_callback_add(
