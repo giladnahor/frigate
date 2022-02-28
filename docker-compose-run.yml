@@ -16,8 +16,11 @@ services:
       - .:/lab/frigate:cached
       - ./config/config.yml:/config/config.yml:ro
       - ./debug:/media/frigate
-      - /dev/:/dev/
-      # - /dev/dri:/dev/dri # for intel hwaccel, needs to be updated for your hardware
+      - /dev/dri:/dev/dri # for intel hwaccel, needs to be updated for your hardware
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/ttyUSB1:/dev/ttyUSB1
+      - /dev/ttyACM0:/dev/ttyACM0
     ports:
       - "1935:1935"
       - "5000:5000"
@@ -26,7 +29,7 @@ services:
       - "8081:8081"
       - "8082:8082"
       - "5557:5557"
-      - "5558:5558"
+      - "6666:6666"
     entrypoint: ["sudo", "/init"]
     command: /bin/sh -c "python3 -u -m frigate"
 

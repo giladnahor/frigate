@@ -295,43 +295,47 @@ def capture_gstreamer_frames(
     # This map the stream ID to camera name
     streams_map = {}
     fps = fps_measure(None, avg_period=2, verbose=True)
+
+    PYTHON_ZMQ_SOURCE = True
     while not stop_event.is_set():
-        buf = socket.recv()  # TBD
-        # [addr, buf] = socket.recv_multipart()
+        if PYTHON_ZMQ_SOURCE:
+            (frame, detections, meta) = socket.recv_pyobj()
+            camera_name = meta.decode("utf-8")
+        else:
+            buf = socket.recv()
+            zmq_frame = detection_pb2.Frame().FromString(buf)
+            frame = get_image(zmq_frame)
+            # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2YUV_I420)
+            stream_id = zmq_frame.stream_name
+            detections = []
 
-        zmq_frame = detection_pb2.Frame().FromString(buf)
-        frame = get_image(zmq_frame)
-        # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2YUV_I420)
-        stream_id = zmq_frame.stream_name
-        detections = []
-
-        # temporary hack to assign cameras to streams
-        if stream_id not in streams_map.keys():
-            # search for unused camera name
-            for camera_name in cameras_names:
-                if camera_name not in streams_map.values():
-                    streams_map[stream_id] = camera_name
-                    break
-            logger.info(f"Got unexpected camera {stream_id} from Gstreamer")
-            continue
-        camera_name = streams_map[stream_id]
-        for detection in zmq_frame.Detections:
-            label = detection.label
-            if label != "person":
+            # temporary hack to assign cameras to streams
+            if stream_id not in streams_map.keys():
+                # search for unused camera name
+                for camera_name in cameras_names:
+                    if camera_name not in streams_map.values():
+                        streams_map[stream_id] = camera_name
+                        break
+                logger.info(f"Got unexpected camera {stream_id} from Gstreamer")
                 continue
+            camera_name = streams_map[stream_id]
+            for detection in zmq_frame.Detections:
+                label = detection.label
+                if label != "person":
+                    continue
 
-            xmin = int(np.clip(detection.xmin, 0, 1) * zmq_frame.Width)
-            ymin = int(np.clip(detection.ymin, 0, 1) * zmq_frame.Height)
-            xmax = int(np.clip(detection.xmax, 0, 1) * zmq_frame.Width)
-            ymax = int(np.clip(detection.ymax, 0, 1) * zmq_frame.Height)
-            det = (
-                label,
-                detection.score,
-                (xmin, ymin, xmax, ymax),
-                (xmax - xmin) * (ymax - ymin),
-                (0, 0, 640, 640),  # region,
-            )
-            detections.append(det)
+                xmin = int(np.clip(detection.xmin, 0, 1) * zmq_frame.Width)
+                ymin = int(np.clip(detection.ymin, 0, 1) * zmq_frame.Height)
+                xmax = int(np.clip(detection.xmax, 0, 1) * zmq_frame.Width)
+                ymax = int(np.clip(detection.ymax, 0, 1) * zmq_frame.Height)
+                det = (
+                    label,
+                    detection.score,
+                    (xmin, ymin, xmax, ymax),
+                    (xmax - xmin) * (ymax - ymin),
+                    (0, 0, 640, 640),  # region,
+                )
+                detections.append(det)
 
         frame_queue = camera_metrics[camera_name]["frame_queue"]
 

@@ -161,7 +161,7 @@ class BirdsEyeFrameManager:
             self.init_zmq()
 
     def init_zmq(self):
-        zmq_port = 5558  # TBD from config
+        zmq_port = 6666  # TBD from config
         zmq_ip = "127.0.0.1"
 
         context = zmq.Context()
@@ -325,13 +325,21 @@ class BirdsEyeFrameManager:
         return True
 
     def update_zmq_frame(self):
-        try:
-            buf = self.socket.recv()
-        except zmq.error.Again as e:
-            print("ZMQ recv reached timeout")
-            return False
-        zmq_frame = detection_pb2.Frame().FromString(buf)
-        frame = get_image(zmq_frame)
+        ZMQ_PYTHON = True
+        if ZMQ_PYTHON:
+            try:
+                frame = self.socket.recv_pyobj()
+            except zmq.error.Again as e:
+                logger.debug("Birdseye ZMQ recv reached timeout")
+                return False
+        else:
+            try:
+                buf = self.socket.recv()
+            except zmq.error.Again as e:
+                logger.debug("ZMQ recv reached timeout")
+                return False
+            zmq_frame = detection_pb2.Frame().FromString(buf)
+            frame = get_image(zmq_frame)
         self.frame = frame
         return True
 
