@@ -70,6 +70,6 @@ services:
     ports:
       - "5557:5557"
       - "6666:6666"
-    command: /bin/sh -c "/local/workspace/tappas/apps/gstreamer/x86/multistream_detection_zmq/multi_stream_detection_zmq.sh --zmq"
+    command: /bin/sh -c "/local/workspace/tappas/apps/gstreamer/x86/multistream_detection_zmq/multi_stream_detection_rtsp_zmq.sh --zmq"
     #command: /bin/sh -c "/local/workspace/tappas/apps/gstreamer/x86/multistream_detection/multi_stream_detection.sh"
     #command: /bin/sh -c "while sleep 1000; do :; done"

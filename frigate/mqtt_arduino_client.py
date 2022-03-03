@@ -12,6 +12,29 @@ class mqtt_arduino_client(object):
         self.connected = self.connect()
         if not self.connected:
             print("ERROR: No Arduino found")
+        self.detected = {
+            "person": False,
+            "banana": False,
+            "cell phone": False,
+        }
+
+    def update(self, topic, payload):
+        if topic in self.detected.keys():
+            if payload != "0":  # payload is nyumber of detections
+                self.detected[topic] = True
+            else:
+                self.detected[topic] = False
+        if self.detected["banana"]:
+            self.write("2")
+        else:
+            if self.detected["cell phone"]:
+                self.write("3")
+            else:
+                if self.detected["person"]:
+                    self.write("1")
+                else:
+                    self.write("0")
+        print(f"status {self.detected}")
 
     def connect(self):
         self.available_ports = self.auto_detect_serial_unix()

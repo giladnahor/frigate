@@ -89,7 +89,6 @@ class TrackedObject:
         # once a true positive, always a true positive
         if not self.false_positive:
             return False
-
         threshold = self.camera_config.objects.filters[self.obj_data["label"]].threshold
         return self.computed_score < threshold
 
@@ -295,7 +294,6 @@ class TrackedObject:
 
 def zone_filtered(obj: TrackedObject, object_config):
     object_name = obj.obj_data["label"]
-
     if object_name in object_config:
         obj_settings = object_config[object_name]
 

@@ -99,7 +99,7 @@ def create_mqtt_client(config: FrigateConfig, camera_metrics):
         def on_zone_command(client, userdata, message):
             payload = message.payload.decode()
             logger.debug(f"on_zone_toggle: {message.topic} {payload}")
-            arduino.write(payload)
+            arduino.update(message.topic.split("/")[-1], payload)
 
     def on_restart_command(client, userdata, message):
         arduino.disconnect()
@@ -147,7 +147,7 @@ def create_mqtt_client(config: FrigateConfig, camera_metrics):
         )
     if ARDUINO:
         client.message_callback_add(
-            f"{mqtt_config.topic_prefix}/zone_0/person", on_zone_command
+            f"{mqtt_config.topic_prefix}/zone_0/#", on_zone_command
         )
 
     client.message_callback_add(

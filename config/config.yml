@@ -38,19 +38,22 @@ cameras:
       zmq_port: 5560
     rtmp:
       enabled: false
+    objects:
+      track:
+        - person
+        - banana
+        - "cell phone"
     zones:
       zone_0:
         # coordinates: 640,300,640,640,300,640,300,300
         coordinates: 640,0,640,640,0,640,0,0
         objects:
           - person
-        filters:
-          person:
-            min_area: 10
-            max_area: 1000000
-            threshold: 0.5
+          - banana
+          - "cell phone"
     mqtt:
       enabled: true
+
   test1:
     ffmpeg:
       inputs:
@@ -84,6 +87,7 @@ cameras:
       zmq_port: 5562
     rtmp:
       enabled: false
+
   test3:
     ffmpeg:
       inputs:
@@ -100,6 +104,7 @@ cameras:
       zmq_port: 5563
     rtmp:
       enabled: false
+
   test4:
     ffmpeg:
       inputs:
@@ -116,6 +121,7 @@ cameras:
       zmq_port: 5563
     rtmp:
       enabled: false
+
   test5:
     ffmpeg:
       inputs:
@@ -132,6 +138,7 @@ cameras:
       zmq_port: 5563
     rtmp:
       enabled: false
+
   test6:
     ffmpeg:
       inputs:
@@ -187,7 +194,6 @@ birdseye:
   enabled: True
   # Optional: Width of the output resolution (default: shown below)
   width: 960
-  # Optional: Height of the output resolution (default: shown below)
   height: 720
   # Optional: Encoding quality of the mpeg1 feed (default: shown below)
   # 1 is the highest quality, and 31 is the lowest. Lower quality feeds utilize less CPU resources.
@@ -197,3 +203,23 @@ birdseye:
   #   motion - cameras are included if motion was detected in the last 30 seconds
   #   continuous - all cameras are included always
   mode: continuous
+
+objects:
+  # Optional: list of objects to track from labelmap.txt (default: shown below)
+  track:
+    - person
+    - banana
+    - "cell phone"
+  filters:
+    person:
+      min_area: 10
+      max_area: 1000000
+      threshold: 0.5
+    banana:
+      min_area: 10
+      max_area: 1000000
+      threshold: 0.5
+    "cell phone":
+      min_area: 10
+      max_area: 1000000
+      threshold: 0.5

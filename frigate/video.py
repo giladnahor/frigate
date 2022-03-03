@@ -345,7 +345,6 @@ def capture_gstreamer_frames(
         frame_size = frame_shape[0] * frame_shape[1]
         frame_buffer = frame_manager.create(frame_name, frame_size)
         frame_buffer[:] = frame.tobytes()
-        # print(f"Created frame {frame_name}")
         camera_metrics[camera_name]["camera_fps"].value = frame_rate_counters[
             camera_name
         ].eps()
@@ -359,12 +358,10 @@ def capture_gstreamer_frames(
         if frame_queue.full():
             skipped_eps_counters[camera_name].update()
             frame_manager.delete(frame_name)
-            # print(f"Deleted frame {frame_name}")
             continue
 
         # close the frame
         frame_manager.close(frame_name)
-        # print(f"Commited frame {frame_name}")
         # add to the queue
         frame_queue.put((frame_time, detections))
         fps.update()
