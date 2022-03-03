@@ -1,8 +1,7 @@
 version: "3.9"
 services:
-  dev:
-    container_name: frigate-dev
-    user: vscode
+  frigate:
+    container_name: frigate
     privileged: true
     network_mode: host
     shm_size: "1024mb"
@@ -30,7 +29,7 @@ services:
       - "8082:8082"
       - "5557:5557"
       - "6666:6666"
-    entrypoint: ["sudo", "/init"]
+    entrypoint: ["/init"]
     command: /bin/sh -c "python3 -u -m frigate"
 
   mqtt:
@@ -39,3 +38,38 @@ services:
     network_mode: host
     ports:
       - "1883:1883"
+
+  tappas:
+    container_name: tappas_frigate
+    image: hailo_tappas:latest
+    privileged: true
+    network_mode: host
+    extra_hosts:
+      - "hailo_tappas:127.0.0.1"
+    group_add:
+      - dialout
+      - video
+    devices:
+      - /dev/dri:/dev/dri
+      - /dev/hailo0:/dev/hailo0
+      - /dev/hailo1:/dev/hailo1
+      - /dev/hailo2:/dev/hailo2
+      
+    volumes:
+     - ${XAUTH_FILE}:/root/.Xauthority:rw \
+     - /tmp/.X11-unix/:/tmp/.X11-unix/ \
+     - /dev:/dev \
+     - /dev/dri:/dev/dri
+     - /lib/firmware:/lib/firmware \
+     - /lib/${ARCH}-linux-gnu/dri:/lib/${ARCH}-linux-gnu/dri \
+     - /usr/lib/${ARCH}-linux-gnu/dri/:/usr/lib/${ARCH}-linux-gnu/dri/ \
+    environment:
+     - DISPLAY=$DISPLAY
+     - XAUTHORITY=$XAUTHORITY
+     - XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR
+    ports:
+      - "5557:5557"
+      - "6666:6666"
+    command: /bin/sh -c "/local/workspace/tappas/apps/gstreamer/x86/multistream_detection_zmq/multi_stream_detection_zmq.sh --zmq"
+    #command: /bin/sh -c "/local/workspace/tappas/apps/gstreamer/x86/multistream_detection/multi_stream_detection.sh"
+    #command: /bin/sh -c "while sleep 1000; do :; done"

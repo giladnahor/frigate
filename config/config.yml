@@ -1,0 +1,199 @@
+mqtt:
+  host: 127.0.0.1
+
+detectors:
+  cpu1:
+    type: cpu
+    num_threads: 4
+  # coral:
+  #   type: edgetpu
+  #   device: usb
+
+gstreamer:
+  enabled: true
+
+ffmpeg:
+  hwaccel_args:
+    - -hwaccel
+    - qsv
+    - -qsv_device
+    - /dev/dri/renderD128
+
+cameras:
+  test0:
+    best_image_timeout: 5
+    ffmpeg:
+      inputs:
+        - path: /media/frigate/VideoClipVGA.mp4
+          input_args: -re -stream_loop -1 -fflags +genpts
+          roles:
+            - detect
+            - rtmp
+    detect:
+      enabled: true
+      height: 640
+      width: 640
+      fps: 20
+      max_disappeared: 5
+      zmq_port: 5560
+    rtmp:
+      enabled: false
+    zones:
+      zone_0:
+        # coordinates: 640,300,640,640,300,640,300,300
+        coordinates: 640,0,640,640,0,640,0,0
+        objects:
+          - person
+        filters:
+          person:
+            min_area: 10
+            max_area: 1000000
+            threshold: 0.5
+    mqtt:
+      enabled: true
+  test1:
+    ffmpeg:
+      inputs:
+        - path: /media/frigate/VideoClipVGA.mp4
+          input_args: -re -stream_loop -1 -fflags +genpts
+          roles:
+            - detect
+    detect:
+      enabled: true
+      height: 640
+      width: 640
+      fps: 20
+      max_disappeared: 5
+      zmq_port: 5561
+    rtmp:
+      enabled: false
+
+  test2:
+    ffmpeg:
+      inputs:
+        - path: /media/frigate/VideoClipVGA.mp4
+          input_args: -re -stream_loop -1 -fflags +genpts
+          roles:
+            - detect
+    detect:
+      enabled: true
+      height: 640
+      width: 640
+      fps: 20
+      max_disappeared: 5
+      zmq_port: 5562
+    rtmp:
+      enabled: false
+  test3:
+    ffmpeg:
+      inputs:
+        - path: /media/frigate/VideoClipVGA.mp4
+          input_args: -re -stream_loop -1 -fflags +genpts
+          roles:
+            - detect
+    detect:
+      enabled: true
+      height: 640
+      width: 640
+      fps: 20
+      max_disappeared: 5
+      zmq_port: 5563
+    rtmp:
+      enabled: false
+  test4:
+    ffmpeg:
+      inputs:
+        - path: /media/frigate/VideoClipVGA.mp4
+          input_args: -re -stream_loop -1 -fflags +genpts
+          roles:
+            - detect
+    detect:
+      enabled: true
+      height: 640
+      width: 640
+      fps: 20
+      max_disappeared: 5
+      zmq_port: 5563
+    rtmp:
+      enabled: false
+  test5:
+    ffmpeg:
+      inputs:
+        - path: /media/frigate/VideoClipVGA.mp4
+          input_args: -re -stream_loop -1 -fflags +genpts
+          roles:
+            - detect
+    detect:
+      enabled: true
+      height: 640
+      width: 640
+      fps: 20
+      max_disappeared: 5
+      zmq_port: 5563
+    rtmp:
+      enabled: false
+  test6:
+    ffmpeg:
+      inputs:
+        - path: /media/frigate/VideoClipVGA.mp4
+          input_args: -re -stream_loop -1 -fflags +genpts
+          roles:
+            - detect
+    detect:
+      enabled: true
+      height: 640
+      width: 640
+      fps: 20
+      max_disappeared: 5
+      zmq_port: 5563
+    rtmp:
+      enabled: false
+  test7:
+    ffmpeg:
+      inputs:
+        - path: /media/frigate/VideoClipVGA.mp4
+          input_args: -re -stream_loop -1 -fflags +genpts
+          roles:
+            - detect
+    detect:
+      enabled: true
+      height: 640
+      width: 640
+      fps: 20
+      max_disappeared: 5
+      zmq_port: 5563
+    rtmp:
+      enabled: false
+
+snapshots:
+  enabled: true
+  timestamp: True
+  required_zones: [zone_0]
+
+  retain:
+    default: 1
+
+model:
+  height: 300
+  width: 300
+
+logger:
+  default: info
+  logs:
+    frigate.mqtt: debug
+
+birdseye:
+  # Optional: Enable birdseye view (default: shown below)
+  enabled: True
+  # Optional: Width of the output resolution (default: shown below)
+  width: 960
+  # Optional: Height of the output resolution (default: shown below)
+  height: 720
+  # Optional: Encoding quality of the mpeg1 feed (default: shown below)
+  # 1 is the highest quality, and 31 is the lowest. Lower quality feeds utilize less CPU resources.
+  quality: 1
+  # Optional: Mode of the view. Available options are: objects, motion, and continuous
+  #   objects - cameras are included if they have had a tracked object within the last 30 seconds
+  #   motion - cameras are included if motion was detected in the last 30 seconds
+  #   continuous - all cameras are included always
+  mode: continuous
