@@ -299,8 +299,8 @@ def capture_gstreamer_frames(
     PYTHON_ZMQ_SOURCE = True
     while not stop_event.is_set():
         if PYTHON_ZMQ_SOURCE:
-            (frame, detections, meta) = socket.recv_pyobj()
-            camera_name = meta.decode("utf-8")
+            (frame, detections, camera_name) = socket.recv_pyobj()
+            # camera_name = meta.decode("utf-8")
         else:
             buf = socket.recv()
             zmq_frame = detection_pb2.Frame().FromString(buf)
