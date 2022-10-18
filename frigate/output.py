@@ -26,8 +26,6 @@ from frigate.config import BirdseyeModeEnum, FrigateConfig
 from frigate.util import SharedMemoryFrameManager, copy_yuv_to_position, get_yuv_crop
 
 import zmq
-import frigate.detection_pb2 as detection_pb2
-from frigate.protobuf_common import get_image
 
 logger = logging.getLogger(__name__)
 

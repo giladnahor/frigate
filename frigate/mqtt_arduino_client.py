@@ -34,7 +34,7 @@ class mqtt_arduino_client(object):
                     self.write("1")
                 else:
                     self.write("0")
-        print(f"status {self.detected}")
+        # print(f"status {self.detected}")
 
     def connect(self):
         self.available_ports = self.auto_detect_serial_unix()

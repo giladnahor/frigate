@@ -578,7 +578,7 @@ class TrackedObjectProcessor(threading.Thread):
         config: FrigateConfig,
         client,
         topic_prefix,
-        tracked_objects_queue,
+        tracked_objects_queue,  # self.detected_frames_queue,
         event_queue,
         event_processed_queue,
         video_output_queue,

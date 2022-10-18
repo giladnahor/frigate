@@ -90,7 +90,7 @@ def create_mqtt_client(config: FrigateConfig, camera_metrics):
         state_topic = f"{message.topic[:-4]}/state"
         client.publish(state_topic, payload, retain=True)
 
-    ARDUINO = True
+    ARDUINO = False
     if ARDUINO:  # TBD Arduino enabled from config
         arduino = mqtt_arduino_client()
         if arduino.connected:
@@ -102,7 +102,8 @@ def create_mqtt_client(config: FrigateConfig, camera_metrics):
             arduino.update(message.topic.split("/")[-1], payload)
 
     def on_restart_command(client, userdata, message):
-        arduino.disconnect()
+        if ARDUINO:
+            arduino.disconnect()
         restart_frigate()
 
     def on_connect(client, userdata, flags, rc):

@@ -30,8 +30,6 @@ from frigate.util import (
 )
 
 import zmq
-import frigate.detection_pb2 as detection_pb2
-from frigate.protobuf_common import get_image, fps_measure
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +125,7 @@ def start_or_restart_ffmpeg(
     return process
 
 
+# Not used by Hailo
 def capture_frames(
     ffmpeg_process,
     camera_name,
@@ -178,76 +177,6 @@ def capture_frames(
         frame_queue.put(current_frame.value)
 
 
-# def capture_gstreamer_frames(
-#     camera_name,
-#     camera_config: CameraConfig,
-#     camera_metrics,
-# ):
-#     frame_manager = SharedMemoryFrameManager()
-
-#     # handle kill requests
-#     stop_event = mp.Event()
-
-#     def receiveSignal(signalNumber, frame):
-#         stop_event.set()
-
-#     signal.signal(signal.SIGTERM, receiveSignal)
-#     signal.signal(signal.SIGINT, receiveSignal)
-
-#     threading.current_thread().name = f"process:{camera_name}"
-#     setproctitle(f"frigate.process:{camera_name}")
-#     listen()
-
-#     frame_rate_counter = EventsPerSecond()
-#     skipped_eps_counter = EventsPerSecond()
-#     frame_rate_counter.start()zmq
-#     socket = ClientSocket(zmq_port, zmq_ip)
-
-#     while not stop_event.is_set():
-#         buf = socket.recv()
-#         zmq_frame = detection_pb2.Frame().FromString(buf)
-#         frame = get_image(zmq_frame)
-#         stream_id = zmq_frame.stream_name
-#         detections = []
-
-#         for detection in zmq_frame.Detections:
-#             label = detection.label
-#             if label != "person":
-#                 continue
-#             xmin = int(detection.xmin * zmq_frame.Width)
-#             ymin = int(detection.ymin * zmq_frame.Height)
-#             xmax = int(detection.xmax * zmq_frame.Width)
-#             ymax = int(detection.ymax * zmq_frame.Height)
-#             det = (
-#                 label,
-#                 detection.score,
-#                 (xmin, ymin, xmax, ymax),
-#                 (xmax - xmin) * (ymax - ymin),zmq
-
-#         frame_time = datetime.datetime.now().timestamp()
-#         frame_name = f"{camera_name}{frame_time}"
-#         frame_shape = frame.shape
-#         frame_size = frame_shape[0] * frame_shape[1]
-#         frame_buffer = frame_manager.create(frame_name, frame_size)
-#         frame_buffer[:] = frame.tobytes()
-#         print(f"Created frame {frame_name}")
-#         camera_metrics["camera_fps"].value = frame_rate_counter.eps()
-#         camera_metrics["skipped_fps"].value = skipped_eps_counter.eps()
-
-#         frame_rate_counter.update()
-
-#         # if the queue is full, skip this frame
-#         if frame_queue.full():
-#             skipped_eps_counter.update()
-#             frame_manager.delete(frame_name)
-#             print(f"Deleted frame {frame_name}")
-#             continue
-
-#         # close the frame
-#         frame_manager.close(frame_name)
-#         print(f"Commited frame {frame_name}")zmq
-
-
 def capture_gstreamer_frames(
     config: FrigateConfig,
     camera_metrics,
@@ -280,8 +209,6 @@ def capture_gstreamer_frames(
     zmq_port = 5557
     zmq_ip = "127.0.0.1"
 
-    # TBD
-    # socket = ClientSocket(zmq_port, zmq_ip)
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
     # We must declare the socket as of type SUBSCRIBER, and pass a prefix filter.
@@ -292,51 +219,8 @@ def capture_gstreamer_frames(
     socket.setsockopt(zmq.CONFLATE, 1)  # last msg only.
     socket.connect("tcp://{}:{}".format(zmq_ip, zmq_port))
 
-    # This map the stream ID to camera name
-    streams_map = {}
-    fps = fps_measure(None, avg_period=2, verbose=True)
-
-    PYTHON_ZMQ_SOURCE = True
     while not stop_event.is_set():
-        if PYTHON_ZMQ_SOURCE:
-            (frame, detections, camera_name) = socket.recv_pyobj()
-            # camera_name = meta.decode("utf-8")
-        else:
-            buf = socket.recv()
-            zmq_frame = detection_pb2.Frame().FromString(buf)
-            frame = get_image(zmq_frame)
-            # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2YUV_I420)
-            stream_id = zmq_frame.stream_name
-            detections = []
-
-            # temporary hack to assign cameras to streams
-            if stream_id not in streams_map.keys():
-                # search for unused camera name
-                for camera_name in cameras_names:
-                    if camera_name not in streams_map.values():
-                        streams_map[stream_id] = camera_name
-                        break
-                logger.info(f"Got unexpected camera {stream_id} from Gstreamer")
-                continue
-            camera_name = streams_map[stream_id]
-            for detection in zmq_frame.Detections:
-                label = detection.label
-                if label != "person":
-                    continue
-
-                xmin = int(np.clip(detection.xmin, 0, 1) * zmq_frame.Width)
-                ymin = int(np.clip(detection.ymin, 0, 1) * zmq_frame.Height)
-                xmax = int(np.clip(detection.xmax, 0, 1) * zmq_frame.Width)
-                ymax = int(np.clip(detection.ymax, 0, 1) * zmq_frame.Height)
-                det = (
-                    label,
-                    detection.score,
-                    (xmin, ymin, xmax, ymax),
-                    (xmax - xmin) * (ymax - ymin),
-                    (0, 0, 640, 640),  # region,
-                )
-                detections.append(det)
-
+        (frame, detections, camera_name) = socket.recv_pyobj()
         frame_queue = camera_metrics[camera_name]["frame_queue"]
 
         frame_time = datetime.datetime.now().timestamp()
@@ -364,10 +248,10 @@ def capture_gstreamer_frames(
         frame_manager.close(frame_name)
         # add to the queue
         frame_queue.put((frame_time, detections))
-        fps.update()
         time.sleep(0)  # allow for context switch
 
 
+# Not used by Hailo
 class CameraWatchdog(threading.Thread):
     def __init__(
         self, camera_name, config, frame_queue, camera_fps, ffmpeg_pid, stop_event
@@ -465,6 +349,7 @@ class CameraWatchdog(threading.Thread):
         self.capture_thread.start()
 
 
+# Not used by Hailo
 class CameraCapture(threading.Thread):
     def __init__(self, camera_name, ffmpeg_process, frame_shape, frame_queue, fps):
         threading.Thread.__init__(self)
@@ -493,6 +378,7 @@ class CameraCapture(threading.Thread):
         )
 
 
+# Not used by Hailo
 def capture_camera(name, config: CameraConfig, process_info):
     stop_event = mp.Event()
 
@@ -523,7 +409,7 @@ def track_camera(
     detection_queue,
     result_connection,  #  self.detection_out_events[name],
     detected_objects_queue,  # self.detected_frames_queue,
-    process_info,
+    process_info,  # self.camera_metrics[name],
     gstreamer_enabled,
 ):
     stop_event = mp.Event()
@@ -613,6 +499,7 @@ def intersects_any(box_a, boxes):
         return True
 
 
+# Not used by Hailo
 def detect(
     object_detector, frame, model_shape, region, objects_to_track, object_filters
 ):
@@ -641,6 +528,7 @@ def detect(
     return detections
 
 
+# Not used by Hailo
 def process_frames(
     camera_name: str,
     frame_queue: mp.Queue,
