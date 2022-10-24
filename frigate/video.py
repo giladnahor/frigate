@@ -207,6 +207,7 @@ def capture_gstreamer_frames(
         skipped_eps_counters[camera_name].start()
 
     zmq_port = 5557
+    zmq_port_lpr = 5558
     zmq_ip = "127.0.0.1"
 
     context = zmq.Context()
@@ -218,6 +219,7 @@ def capture_gstreamer_frames(
     socket.setsockopt(zmq.RCVHWM, 10)  # limit Q size
     socket.setsockopt(zmq.CONFLATE, 1)  # last msg only.
     socket.connect("tcp://{}:{}".format(zmq_ip, zmq_port))
+    socket.connect("tcp://{}:{}".format(zmq_ip, zmq_port_lpr))
 
     while not stop_event.is_set():
         (frame, detections, camera_name) = socket.recv_pyobj()

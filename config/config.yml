@@ -28,16 +28,6 @@ cameras:
           input_args: -re -stream_loop -1 -fflags +genpts
           roles:
             - detect
-            - rtmp
-    detect:
-      enabled: true
-      height: 640
-      width: 640
-      fps: 20
-      max_disappeared: 5
-      zmq_port: 5560
-    rtmp:
-      enabled: false
     objects:
       track:
         - person
@@ -59,15 +49,6 @@ cameras:
           input_args: -re -stream_loop -1 -fflags +genpts
           roles:
             - detect
-    detect:
-      enabled: true
-      height: 640
-      width: 640
-      fps: 20
-      max_disappeared: 5
-      zmq_port: 5561
-    rtmp:
-      enabled: false
 
   camera2:
     ffmpeg:
@@ -76,15 +57,6 @@ cameras:
           input_args: -re -stream_loop -1 -fflags +genpts
           roles:
             - detect
-    detect:
-      enabled: true
-      height: 640
-      width: 640
-      fps: 20
-      max_disappeared: 5
-      zmq_port: 5562
-    rtmp:
-      enabled: false
 
   camera3:
     ffmpeg:
@@ -93,15 +65,6 @@ cameras:
           input_args: -re -stream_loop -1 -fflags +genpts
           roles:
             - detect
-    detect:
-      enabled: true
-      height: 640
-      width: 640
-      fps: 20
-      max_disappeared: 5
-      zmq_port: 5563
-    rtmp:
-      enabled: false
 
   camera4:
     ffmpeg:
@@ -110,15 +73,6 @@ cameras:
           input_args: -re -stream_loop -1 -fflags +genpts
           roles:
             - detect
-    detect:
-      enabled: true
-      height: 640
-      width: 640
-      fps: 20
-      max_disappeared: 5
-      zmq_port: 5563
-    rtmp:
-      enabled: false
 
   camera5:
     ffmpeg:
@@ -127,15 +81,6 @@ cameras:
           input_args: -re -stream_loop -1 -fflags +genpts
           roles:
             - detect
-    detect:
-      enabled: true
-      height: 640
-      width: 640
-      fps: 20
-      max_disappeared: 5
-      zmq_port: 5563
-    rtmp:
-      enabled: false
 
   camera6:
     ffmpeg:
@@ -144,15 +89,7 @@ cameras:
           input_args: -re -stream_loop -1 -fflags +genpts
           roles:
             - detect
-    detect:
-      enabled: true
-      height: 640
-      width: 640
-      fps: 20
-      max_disappeared: 5
-      zmq_port: 5563
-    rtmp:
-      enabled: false
+
   camera7:
     ffmpeg:
       inputs:
@@ -160,15 +97,6 @@ cameras:
           input_args: -re -stream_loop -1 -fflags +genpts
           roles:
             - detect
-    detect:
-      enabled: true
-      height: 640
-      width: 640
-      fps: 20
-      max_disappeared: 5
-      zmq_port: 5563
-    rtmp:
-      enabled: false
 
   lpr0:
     ffmpeg:
@@ -179,12 +107,10 @@ cameras:
             - detect
     detect:
       enabled: true
-      height: 640
+      height: 360
       width: 640
       fps: 20
       max_disappeared: 5
-    rtmp:
-      enabled: false
     objects:
       # Optional: list of objects to track from labelmap.txt (default: shown below)
       track:
@@ -211,6 +137,15 @@ logger:
   default: info
   logs:
     frigate.mqtt: info
+
+detect:
+  enabled: true
+  height: 640
+  width: 640
+  fps: 20
+  max_disappeared: 5
+rtmp:
+  enabled: false
 
 birdseye:
   # Optional: Enable birdseye view (default: shown below)

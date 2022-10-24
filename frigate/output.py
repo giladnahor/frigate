@@ -323,21 +323,11 @@ class BirdsEyeFrameManager:
         return True
 
     def update_zmq_frame(self):
-        ZMQ_PYTHON = True
-        if ZMQ_PYTHON:
-            try:
-                frame = self.socket.recv_pyobj()
-            except zmq.error.Again as e:
-                logger.debug("Birdseye ZMQ recv reached timeout")
-                return False
-        else:
-            try:
-                buf = self.socket.recv()
-            except zmq.error.Again as e:
-                logger.debug("ZMQ recv reached timeout")
-                return False
-            zmq_frame = detection_pb2.Frame().FromString(buf)
-            frame = get_image(zmq_frame)
+        try:
+            frame = self.socket.recv_pyobj()
+        except zmq.error.Again as e:
+            logger.debug("Birdseye ZMQ recv reached timeout")
+            return False
         self.frame = frame
         return True
 
@@ -356,7 +346,7 @@ class BirdsEyeFrameManager:
             if (now - self.last_output_time) < 1 / 20:
                 return False
 
-            if self.update_zmq_frame():
+            if self.update_zmq_frame() or (now - self.last_output_time) > 1:
                 self.last_output_time = now
                 return True
         else:
@@ -451,7 +441,6 @@ def output_frames(config: FrigateConfig, video_output_queue):
 
         frame = frame_manager.get(frame_id, config.cameras[camera].frame_shape_yuv)
 
-        # print(f'SERVER {[ws.environ["PATH_INFO"] for ws in websocket_server.manager]}')
         # send camera frame to ffmpeg process if websockets are connected
         if any(
             ws.environ["PATH_INFO"].endswith(camera) for ws in websocket_server.manager
