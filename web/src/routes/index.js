@@ -18,6 +18,11 @@ export async function getBirdseye(url, cb, props) {
   return module.default;
 }
 
+export async function getGstStream(url, cb, props) {
+  const module = await import('./GstStream.jsx');
+  return module.default;
+}
+
 export async function getEvents(url, cb, props) {
   const module = await import('./Events');
   return module.default;

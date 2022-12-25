@@ -28,6 +28,7 @@ export default function App() {
                   <AsyncRoute path="/cameras/:camera/editor" getComponent={Routes.getCameraMap} />
                   <AsyncRoute path="/cameras/:camera" getComponent={Routes.getCamera} />
                   <AsyncRoute path="/birdseye" getComponent={Routes.getBirdseye} />
+                  <AsyncRoute path="/floor0" getComponent={Routes.getGstStream} />
                   <AsyncRoute path="/events" getComponent={Routes.getEvents} />
                   <AsyncRoute path="/recording/:camera/:date?/:hour?/:seconds?" getComponent={Routes.getRecording} />
                   <AsyncRoute path="/debug" getComponent={Routes.getDebug} />

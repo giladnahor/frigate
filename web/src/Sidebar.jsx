@@ -51,6 +51,7 @@ export default function Sidebar() {
         }
       </Match>
       {birdseye?.enabled ? <Destination href="/birdseye" text="Birdseye" /> : null}
+      <Destination href="/floor0" text="floor0" />
       <Destination href="/events" text="Events" />
       <Destination href="/debug" text="Debug" />
       <Separator />

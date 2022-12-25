@@ -93,7 +93,7 @@ class BroadcastThread(threading.Thread):
 
 
 class BirdsEyeFrameManager:
-    def __init__(self, config, frame_manager: SharedMemoryFrameManager):
+    def __init__(self, config, frame_manager: SharedMemoryFrameManager, zmq_port=6666):
         self.config = config
         self.mode = config.birdseye.mode
         self.frame_manager = frame_manager
@@ -102,7 +102,7 @@ class BirdsEyeFrameManager:
         self.frame_shape = (height, width)
         self.yuv_shape = (height * 3 // 2, width)
         self.frame = np.ndarray(self.yuv_shape, dtype=np.uint8)
-
+        self.zmq_port = zmq_port  # TBD from config
         # initialize the frame as black and with the frigate logo
         self.blank_frame = np.zeros(self.yuv_shape, np.uint8)
         self.blank_frame[:] = 128
@@ -159,16 +159,15 @@ class BirdsEyeFrameManager:
             self.init_zmq()
 
     def init_zmq(self):
-        zmq_port = 6666  # TBD from config
         zmq_ip = "127.0.0.1"
 
         context = zmq.Context()
         self.socket = context.socket(zmq.SUB)
         self.socket.setsockopt(zmq.SUBSCRIBE, b"")
-        self.socket.setsockopt(zmq.RCVHWM, 10)  # limit Q size
+        self.socket.setsockopt(zmq.RCVHWM, 2)  # limit Q size
         self.socket.setsockopt(zmq.CONFLATE, 1)  # last msg only.
         self.socket.setsockopt(zmq.RCVTIMEO, 50)  # set recv timeout
-        self.socket.connect("tcp://{}:{}".format(zmq_ip, zmq_port))
+        self.socket.connect("tcp://{}:{}".format(zmq_ip, self.zmq_port))
 
     def clear_frame(self):
         logger.debug(f"Clearing the birdseye frame")
@@ -360,6 +359,71 @@ class BirdsEyeFrameManager:
         return False
 
 
+class GstreamerFrameManager:
+    def __init__(
+        self,
+        config,
+        zmq_port=7666,
+        name="floor0",
+    ):
+        self.config = config
+        self.mode = BirdseyeModeEnum.continuous
+        width = config.birdseye.width
+        height = config.birdseye.height
+        self.frame_shape = (height, width)
+        self.yuv_shape = (height * 3 // 2, width)
+        self.frame = np.ndarray(self.yuv_shape, dtype=np.uint8)
+        self.zmq_port = zmq_port  # TBD from config
+        # initialize the frame as black and with the frigate logo
+        self.blank_frame = np.zeros(self.yuv_shape, np.uint8)
+        self.blank_frame[:] = 128
+        self.blank_frame[0 : self.frame_shape[0], 0 : self.frame_shape[1]] = 16
+
+        self.frame[:] = self.blank_frame
+        self.last_output_time = 0.0
+
+        self.init_zmq()
+
+    def init_zmq(self):
+        zmq_ip = "127.0.0.1"  # TBD from config
+
+        context = zmq.Context()
+        self.socket = context.socket(zmq.SUB)
+        self.socket.setsockopt(zmq.SUBSCRIBE, b"")
+        self.socket.setsockopt(zmq.RCVHWM, 2)  # limit Q size
+        self.socket.setsockopt(zmq.CONFLATE, 1)  # last msg only.
+        self.socket.setsockopt(zmq.RCVTIMEO, 50)  # set recv timeout
+        self.socket.connect("tcp://{}:{}".format(zmq_ip, self.zmq_port))
+
+    def clear_frame(self):
+        logger.debug(f"Clearing the birdseye frame")
+        self.frame[:] = self.blank_frame
+
+    def update_zmq_frame(self):
+        try:
+            frame = self.socket.recv_pyobj(zmq.NOBLOCK)
+        except zmq.error.Again as e:
+            logger.debug("Birdseye ZMQ recv reached timeout")
+            return False
+        self.frame = frame
+        return True
+
+    def update(self) -> bool:
+
+        now = datetime.datetime.now().timestamp()
+
+        # if the frame was updated or the fps is too low, send frame
+        # limit output to 20 fps
+        if (now - self.last_output_time) < 1 / 20:
+            return False
+
+        if self.update_zmq_frame() or (now - self.last_output_time) > 1:
+            self.last_output_time = now
+            return True
+
+        return False
+
+
 def output_frames(config: FrigateConfig, video_output_queue):
     threading.current_thread().name = f"output"
     setproctitle(f"frigate.output")
@@ -406,26 +470,44 @@ def output_frames(config: FrigateConfig, video_output_queue):
             camera, converters[camera], websocket_server
         )
 
-    if config.birdseye.enabled:
-        converters["birdseye"] = FFMpegConverter(
+    # if config.birdseye.enabled:
+    #     converters["birdseye"] = FFMpegConverter(
+    #         config.birdseye.width,
+    #         config.birdseye.height,
+    #         config.birdseye.width,
+    #         config.birdseye.height,
+    #         config.birdseye.quality,
+    #     )
+    #     broadcasters["birdseye"] = BroadcastThread(
+    #         "birdseye", converters["birdseye"], websocket_server
+    #     )
+
+    streamers = {"birdseye": 6666, "floor0": 7666}
+    gstreamer_managers = {}
+
+    for streamer, port in streamers.items():
+        converters[streamer] = FFMpegConverter(
             config.birdseye.width,
             config.birdseye.height,
             config.birdseye.width,
             config.birdseye.height,
             config.birdseye.quality,
         )
-        broadcasters["birdseye"] = BroadcastThread(
-            "birdseye", converters["birdseye"], websocket_server
+        broadcasters[streamer] = BroadcastThread(
+            streamer, converters[streamer], websocket_server
         )
-
+        gstreamer_managers[streamer] = GstreamerFrameManager(
+            config, name=streamer, zmq_port=port
+        )
     websocket_thread.start()
 
     for t in broadcasters.values():
         t.start()
 
-    birdseye_manager = BirdsEyeFrameManager(config, frame_manager)
+    # birdseye_manager = BirdsEyeFrameManager(config, frame_manager)
 
     while not stop_event.is_set():
+        frame_available = False
         try:
             (
                 camera,
@@ -433,39 +515,53 @@ def output_frames(config: FrigateConfig, video_output_queue):
                 current_tracked_objects,
                 motion_boxes,
                 regions,
-            ) = video_output_queue.get(True, 10)
+            ) = video_output_queue.get(False)
+            frame_available = True
         except queue.Empty:
-            continue
+            frame_available = False
+            # print("Empty")
+        if video_output_queue.qsize() > 0:
+            print(f"video_output_queue size: {video_output_queue.qsize()}")
+        if frame_available:
+            frame_id = f"{camera}{frame_time}"
 
-        frame_id = f"{camera}{frame_time}"
+            frame = frame_manager.get(frame_id, config.cameras[camera].frame_shape_yuv)
 
-        frame = frame_manager.get(frame_id, config.cameras[camera].frame_shape_yuv)
+            # send camera frame to ffmpeg process if websockets are connected
+            if any(
+                ws.environ["PATH_INFO"].endswith(camera)
+                for ws in websocket_server.manager
+            ):
+                # write to the converter for the camera if clients are listening to the specific camera
+                converters[camera].write(frame.tobytes())
 
-        # send camera frame to ffmpeg process if websockets are connected
-        if any(
-            ws.environ["PATH_INFO"].endswith(camera) for ws in websocket_server.manager
-        ):
-            # write to the converter for the camera if clients are listening to the specific camera
-            converters[camera].write(frame.tobytes())
+            # if camera in previous_frames:
+            #     frame_manager.delete(f"{camera}{previous_frames[camera]}")
+
+            # previous_frames[camera] = frame_time
+            frame_manager.delete(frame_id)
 
         # update birdseye if websockets are connected
-        if config.birdseye.enabled and any(
-            ws.environ["PATH_INFO"].endswith("birdseye")
-            for ws in websocket_server.manager
-        ):
-            if birdseye_manager.update(
-                camera,
-                len(current_tracked_objects),
-                len(motion_boxes),
-                frame_time,
-                frame,
+        # if config.birdseye.enabled and any(
+        #     ws.environ["PATH_INFO"].endswith("birdseye")
+        #     for ws in websocket_server.manager
+        # ):
+        #     if birdseye_manager.update(
+        #         camera,
+        #         len(current_tracked_objects),
+        #         len(motion_boxes),
+        #         frame_time,
+        #         frame,
+        #     ):
+        #         converters["birdseye"].write(birdseye_manager.frame.tobytes())
+
+        # update gstreamer frame managers if websockets are connected
+        for key, manager in gstreamer_managers.items():
+            if any(
+                ws.environ["PATH_INFO"].endswith(key) for ws in websocket_server.manager
             ):
-                converters["birdseye"].write(birdseye_manager.frame.tobytes())
-
-        if camera in previous_frames:
-            frame_manager.delete(f"{camera}{previous_frames[camera]}")
-
-        previous_frames[camera] = frame_time
+                if manager.update():
+                    converters[key].write(manager.frame.tobytes())
 
     while not video_output_queue.empty():
         (
